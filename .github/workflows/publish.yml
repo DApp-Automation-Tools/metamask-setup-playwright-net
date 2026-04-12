@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
-      contents: read
+      contents: write
     
     steps:
       - uses: actions/checkout@v4
@@ -22,11 +22,24 @@ jobs:
         env:
           NUGET_AUTH_TOKEN: ${{ secrets.NUGET_TOKEN }}
       
+      - name: Set version
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+      
       - name: Build the package
-        run: dotnet build --configuration Release MetamaskSetup.Playwright.csproj
+        run: dotnet build --configuration Release MetamaskSetup.Playwright.csproj /p:Version=${{ steps.version.outputs.VERSION }}
       
       - name: Create the package
-        run: dotnet pack --configuration Release MetamaskSetup.Playwright.csproj
+        run: dotnet pack --configuration Release MetamaskSetup.Playwright.csproj /p:Version=${{ steps.version.outputs.VERSION }}
+      
+      - name: Upload NuGet package as release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            **/bin/Release/*.nupkg
+            **/bin/Release/*.snupkg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Publish the package to NuGet
-        run: dotnet nuget push bin/Release/*.nupkg --api-key ${{ secrets.NUGET_TOKEN }}
+        run: dotnet nuget push bin/Release/*.nupkg --api-key ${{ secrets.NUGET_TOKEN }} --source https://api.nuget.org/v3/index.json --skip-duplicate
