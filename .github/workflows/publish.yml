@@ -1,0 +1,32 @@
+name: Publish to NuGet
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+          source-url: https://api.nuget.org/v3/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.NUGET_TOKEN }}
+      
+      - name: Build the package
+        run: dotnet build --configuration Release MetamaskSetup.Playwright.csproj
+      
+      - name: Create the package
+        run: dotnet pack --configuration Release MetamaskSetup.Playwright.csproj
+      
+      - name: Publish the package to NuGet
+        run: dotnet nuget push bin/Release/*.nupkg --api-key ${{ secrets.NUGET_TOKEN }}

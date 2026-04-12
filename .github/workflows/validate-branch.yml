@@ -1,0 +1,20 @@
+name: Validate Branch Name
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name
+        run: |
+          if [[ ! "${{ github.head_ref }}" =~ ^(major|feature|fix)/ ]]; then
+            echo "❌ Branch name must start with 'major/', 'feature/', or 'fix/'."
+            echo "Current branch: ${{ github.head_ref }}"
+            echo "Examples: feature/add-login, fix/button-click, major/v2-release"
+            exit 1
+          fi
+          echo "✅ Branch name is valid: ${{ github.head_ref }}"

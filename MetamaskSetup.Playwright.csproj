@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    
+    <!-- NuGet Package Properties -->
+    <TargetFramework>net8.0</TargetFramework>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Authors>Oleksandra Chuprina</Authors>
+    <Company>DApp-Automation-Tools</Company>
+    <Description>Playwright-based automation for a MetaMask setup: persistent Chromium with the extension, create/import wallet, unlock, custom networks, switch network, import accounts by private key, optional on-disk profile cache, and cleanup.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/DApp-Automation-Tools/metamask-setup-playwright-net</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/DApp-Automation-Tools/metamask-setup-playwright-net</RepositoryUrl>
+    <RepositoryType>MetaMask</RepositoryType>
+    <NeutralLanguage>en</NeutralLanguage>
+    <Version>1.0.0</Version>
+    <PackageTags>playwright;metamask;automation;testing;web3;browser-extension;e2e;dapp</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
+  </ItemGroup>
+
+</Project>
