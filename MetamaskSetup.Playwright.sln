@@ -5,6 +5,10 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetamaskSetup.Playwright", "MetamaskSetup.Playwright.csproj", "{CFABB94D-F76D-46CA-9A65-F69D8815995C}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{2E1CA325-1650-4ED4-8DC0-CCDB695C0089}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetamaskSetup.Playwright.Tests", "tests\MetamaskSetup.Playwright.Tests\MetamaskSetup.Playwright.Tests.csproj", "{17BD9DDC-51DE-414F-8618-2AB414091249}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,8 +31,23 @@ Global
 		{CFABB94D-F76D-46CA-9A65-F69D8815995C}.Release|x64.Build.0 = Release|Any CPU
 		{CFABB94D-F76D-46CA-9A65-F69D8815995C}.Release|x86.ActiveCfg = Release|Any CPU
 		{CFABB94D-F76D-46CA-9A65-F69D8815995C}.Release|x86.Build.0 = Release|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Debug|x64.Build.0 = Debug|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Debug|x86.Build.0 = Debug|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Release|x64.ActiveCfg = Release|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Release|x64.Build.0 = Release|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Release|x86.ActiveCfg = Release|Any CPU
+		{17BD9DDC-51DE-414F-8618-2AB414091249}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{17BD9DDC-51DE-414F-8618-2AB414091249} = {2E1CA325-1650-4ED4-8DC0-CCDB695C0089}
 	EndGlobalSection
 EndGlobal

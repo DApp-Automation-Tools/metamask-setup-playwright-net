@@ -12,7 +12,7 @@ public class MetaMaskSetupService
 {
     private const string DefaultContextCachePath = "./cache/metamask-profiles";
     private const int DefaultExtensionSaveDelayMs = 2000;
-    private const int ContextCloseDelayMs = 1000;
+    private const int ContextCloseDelayMs = 5000;
 
     private readonly IBrowserType _browserType;
     private readonly string _metamaskExtensionPath;

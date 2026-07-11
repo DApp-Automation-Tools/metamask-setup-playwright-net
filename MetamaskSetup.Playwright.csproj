@@ -17,7 +17,17 @@
     <NeutralLanguage>en</NeutralLanguage>
     <PackageTags>playwright;metamask;automation;testing;web3;browser-extension;e2e;dapp</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Prevent Microsoft.TestPlatform.ImportAfter.targets (installed globally by Microsoft.NET.Test.Sdk)
+         from doubling the compile pipeline when the test project is built in the same solution. -->
+    <IsTestProject>false</IsTestProject>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Prevent the default **/*.cs glob from pulling in test project sources or
+         any generated obj files from a test project that ended up at the library root. -->
+    <Compile Remove="tests\**" />
+    <Compile Remove="MetamaskSetup.Playwright.Tests\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\"/>
@@ -26,5 +36,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
   </ItemGroup>
+
 
 </Project>
