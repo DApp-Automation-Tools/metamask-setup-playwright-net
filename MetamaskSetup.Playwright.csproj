@@ -27,6 +27,11 @@
          any generated obj files from a test project that ended up at the library root. -->
     <Compile Remove="tests\**" />
     <Compile Remove="MetamaskSetup.Playwright.Tests\**" />
+    <!-- Prevent test files from appearing as loose content inside the .nupkg.
+         None/Content items inherit the same SDK glob and would otherwise include
+         every file under tests\ in the package output. -->
+    <None Remove="tests\**" />
+    <Content Remove="tests\**" />
   </ItemGroup>
 
   <ItemGroup>
