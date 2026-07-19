@@ -47,7 +47,7 @@ public sealed class FreshWalletCreationTests : IAsyncLifetime
         {
             context = await service.SetupAsync();
 
-            AssertContextIsReady(context);
+            await MetaMaskAssertions.AssertContextReadyAsync(context);
             Assert.Empty(cache.CacheEntries());
         }
         finally
@@ -63,7 +63,7 @@ public sealed class FreshWalletCreationTests : IAsyncLifetime
     //
     // After onboarding, the service runs Lock → Unlock → close → copy profile to
     // cache → relaunch → Unlock. We verify the returned context is usable AND
-    // exactly one cache entry was written.
+    // exactly one non-empty cache entry was written to disk.
     // -------------------------------------------------------------------------
 
     [Fact]
@@ -78,32 +78,22 @@ public sealed class FreshWalletCreationTests : IAsyncLifetime
             .WithExtensionSaveDelayMs(500);
 
         IBrowserContext? context = null;
-        using var consoleCapture = new ConsoleCapture();
         try
         {
             context = await service.SetupAsync();
 
-            AssertContextIsReady(context);
+            await MetaMaskAssertions.AssertContextReadyAsync(context);
 
-            Assert.Single(cache.CacheEntries());
-            Assert.True(consoleCapture.Contains("Context saved to cache"),
-                $"Expected 'Context saved to cache' in console output but got:\n{consoleCapture.Output}");
+            var entries = cache.CacheEntries();
+            Assert.Single(entries);
+            Assert.True(
+                Directory.Exists(Path.Combine(entries[0], "Default")),
+                "Cache entry must contain a valid Chromium profile (Default subdirectory).");
         }
         finally
         {
             if (context != null)
                 await service.CleanupAsync(context);
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-
-    private static void AssertContextIsReady(IBrowserContext context)
-    {
-        Assert.NotNull(context);
-        Assert.NotEmpty(context.Pages);
-        Assert.Contains("chrome-extension://", context.Pages[1].Url);
     }
 }

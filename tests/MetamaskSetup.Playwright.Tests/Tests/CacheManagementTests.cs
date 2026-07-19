@@ -62,6 +62,11 @@ public sealed class CacheManagementTests : IAsyncLifetime
         Assert.NotEqual(
             Path.GetFileName(entries[0]),
             Path.GetFileName(entries[1]));
+
+        // Each entry must be a valid Chromium profile
+        foreach (var entry in entries)
+            Assert.True(Directory.Exists(Path.Combine(entry, "Default")),
+                $"Cache entry '{Path.GetFileName(entry)}' must contain a Chromium profile.");
     }
 
     // -------------------------------------------------------------------------
@@ -93,7 +98,12 @@ public sealed class CacheManagementTests : IAsyncLifetime
         var context2 = await service2.SetupAsync();
         await service2.CleanupAsync(context2);
 
-        Assert.Equal(2, cache.CacheEntries().Length);
+        var entries = cache.CacheEntries();
+        Assert.Equal(2, entries.Length);
+
+        foreach (var entry in entries)
+            Assert.True(Directory.Exists(Path.Combine(entry, "Default")),
+                $"Cache entry '{Path.GetFileName(entry)}' must contain a Chromium profile.");
     }
 
     // -------------------------------------------------------------------------
@@ -112,14 +122,15 @@ public sealed class CacheManagementTests : IAsyncLifetime
             .UseContextCacheIfExists(false);
 
         IBrowserContext? context = null;
-        using var consoleCapture = new ConsoleCapture();
         try
         {
             context = await service.SetupAsync();
 
-            Assert.NotNull(context);
+            // Wallet must be unlocked — setup completed successfully even without caching
+            await MetaMaskAssertions.AssertContextReadyAsync(context);
+
+            // No cache entry must have been written to disk
             Assert.Empty(cache.CacheEntries());
-            Assert.False(consoleCapture.Contains("Context saved to cache"));
         }
         finally
         {
@@ -149,7 +160,7 @@ public sealed class CacheManagementTests : IAsyncLifetime
         await warmup.CleanupAsync(warmupContext);
         Assert.Single(cache.CacheEntries());
 
-        // Step 2: same parameters, caching disabled → onboarding runs again, no new entry
+        // Step 2: same parameters, caching disabled → onboarding runs again, no new entry written
         var service = new MetaMaskSetupService(_playwright.Chromium, _extension.ExtensionPath)
             .WithPassword(TestConfig.Password)
             .WithSeedPhrase(TestConfig.SeedPhrase)
@@ -157,15 +168,15 @@ public sealed class CacheManagementTests : IAsyncLifetime
             .UseContextCacheIfExists(false);
 
         IBrowserContext? context = null;
-        using var consoleCapture = new ConsoleCapture();
         try
         {
             context = await service.SetupAsync();
 
-            Assert.NotNull(context);
+            // Wallet must be unlocked — fresh onboarding completed successfully
+            await MetaMaskAssertions.AssertContextReadyAsync(context);
+
+            // Cache count must not have grown — UseContextCacheIfExists(false) skips the write
             Assert.Single(cache.CacheEntries());
-            Assert.False(consoleCapture.Contains("Context saved to cache"),
-                "UseContextCacheIfExists(false) must not write a cache entry.");
         }
         finally
         {

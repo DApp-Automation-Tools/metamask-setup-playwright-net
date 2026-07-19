@@ -12,7 +12,7 @@ public class MetaMaskSetupService
 {
     private const string DefaultContextCachePath = "./cache/metamask-profiles";
     private const int DefaultExtensionSaveDelayMs = 2000;
-    private const int ContextCloseDelayMs = 5000;
+    private const int ProfileReleaseTimeoutMs = 20_000;
 
     private readonly IBrowserType _browserType;
     private readonly string _metamaskExtensionPath;
@@ -177,7 +177,7 @@ public class MetaMaskSetupService
                 await metaMaskDriver.ImportWalletFromPrivateKeyAsync(privateKey);
             }
 
-            await Task.Delay(_extensionSaveDelayMs);
+            await WaitForExtensionWriteQuiescenceAsync(_tempUserProfilePath, extensionId, _extensionSaveDelayMs);
         }
 
         if (!usedExistingContext && !useExistingCache && _useContextCacheIfExists && !contextCachePathIsProfile)
@@ -188,10 +188,10 @@ public class MetaMaskSetupService
                 await metaMaskDriver.UnlockWalletAsync();
                 await homePage.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
                 await WaitUtils.WaitUntilStableAsync(homePage);
-                await Task.Delay(_extensionSaveDelayMs);
+                await WaitForExtensionWriteQuiescenceAsync(_tempUserProfilePath, extensionId, _extensionSaveDelayMs);
 
                 await context.CloseAsync();
-                await Task.Delay(ContextCloseDelayMs);
+                await WaitForExtensionStorageReleaseAsync(_tempUserProfilePath, extensionId, ProfileReleaseTimeoutMs);
 
                 var cacheDir = Path.GetDirectoryName(cachePath);
                 if (!string.IsNullOrEmpty(cacheDir))
@@ -289,6 +289,200 @@ public class MetaMaskSetupService
         Console.WriteLine($"MetaMask User Data Directory: {_tempUserProfilePath}");
 
         return context;
+    }
+
+    /// <summary>
+    /// Waits until MetaMask's extension storage has been quiescent (no file-system
+    /// writes) for <paramref name="quietWindowMs"/> milliseconds, using a two-phase
+    /// strategy that is safe regardless of when MetaMask's async write begins.
+    /// <para>
+    /// MetaMask commits vault state to disk asynchronously after each UI operation.
+    /// The write may start anywhere from immediately to several seconds after the
+    /// UI settles — so a plain quiet timer started right after the UI operation
+    /// would fire prematurely if MetaMask hasn't started writing yet.
+    /// </para>
+    /// <para>
+    /// <b>Phase 1</b> waits up to <paramref name="firstWriteGracePeriodMs"/> for
+    /// the first write event. If no write is observed, the state was already committed
+    /// during the UI interaction itself and we return immediately.
+    /// <b>Phase 2</b> (entered only when a write is detected) arms a quiet-window
+    /// timer that resets on every subsequent event and fires when
+    /// <paramref name="quietWindowMs"/> of silence has passed.
+    /// </para>
+    /// </summary>
+    private static async Task WaitForExtensionWriteQuiescenceAsync(
+        string profilePath,
+        string extensionId,
+        int quietWindowMs = 2_000,
+        int timeoutMs = 15_000,
+        int firstWriteGracePeriodMs = 3_000)
+    {
+        // Prefer the narrowest scope that covers MetaMask's writes to reduce noise
+        // from unrelated Chromium background activity.
+        var candidatePaths = new[]
+        {
+            Path.Combine(profilePath, "Default", "IndexedDB",
+                $"chrome-extension_{extensionId}_0.indexeddb.leveldb"),
+            Path.Combine(profilePath, "Default", "Local Extension Settings", extensionId),
+        };
+
+        var watchPath = candidatePaths.FirstOrDefault(Directory.Exists)
+            ?? Path.Combine(profilePath, "Default");
+
+        if (!Directory.Exists(watchPath))
+        {
+            // Profile not yet initialised — use the quiet window as a minimum delay.
+            await Task.Delay(quietWindowMs);
+            return;
+        }
+
+        Console.WriteLine($"[MetaMaskSetupService] Waiting for extension writes to quiesce (quiet window {quietWindowMs}ms)...");
+
+        var firstWriteSeen = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var quiescent = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // timerHolder[0] is null during phase 1. Event handlers call Change() on it:
+        // a null-conditional Change() is a safe no-op. The timer is created at the start
+        // of phase 2, at which point subsequent events reset it correctly.
+        Timer?[] timerHolder = [null];
+
+        FileSystemEventHandler onEvent = (_, _) =>
+        {
+            firstWriteSeen.TrySetResult(true);
+            timerHolder[0]?.Change(quietWindowMs, Timeout.Infinite);
+        };
+
+        using var watcher = new FileSystemWatcher(watchPath)
+        {
+            IncludeSubdirectories = true,
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+            InternalBufferSize = 65536,
+            EnableRaisingEvents = true
+        };
+
+        watcher.Changed += onEvent;
+        watcher.Created += onEvent;
+        watcher.Deleted += onEvent;
+
+        try
+        {
+            // Phase 1 — wait for MetaMask to begin writing, or exhaust the grace period.
+            await Task.WhenAny(firstWriteSeen.Task, Task.Delay(firstWriteGracePeriodMs));
+
+            if (!firstWriteSeen.Task.IsCompleted)
+            {
+                // No writes observed in the grace period: state was committed during
+                // the preceding UI operation (e.g. during WaitUntilStableAsync).
+                Console.WriteLine("[MetaMaskSetupService] No extension writes observed — state assumed already persisted.");
+                return;
+            }
+
+            // Phase 2 — write burst started; arm the quiet timer and wait for silence.
+            timerHolder[0] = new Timer(_ => quiescent.TrySetResult(true), null, quietWindowMs, Timeout.Infinite);
+
+            var remainingMs = Math.Max(quietWindowMs, timeoutMs - firstWriteGracePeriodMs);
+            await Task.WhenAny(quiescent.Task, Task.Delay(remainingMs));
+
+            if (quiescent.Task.IsCompleted)
+                Console.WriteLine("[MetaMaskSetupService] Extension writes quiescent — state persisted.");
+            else
+                Console.WriteLine($"[MetaMaskSetupService] Warning: extension write quiescence timed out after {timeoutMs}ms — proceeding.");
+        }
+        finally
+        {
+            watcher.Changed -= onEvent;
+            watcher.Created -= onEvent;
+            watcher.Deleted -= onEvent;
+            timerHolder[0]?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Waits until Chromium has fully released the MetaMask extension's LevelDB storage lock,
+    /// which is a reliable signal that the browser process has exited and the profile has been
+    /// completely flushed to disk. This replaces a fixed delay after <c>context.CloseAsync()</c>.
+    /// Falls back to directory size quiescence polling when the LOCK file cannot be located.
+    /// </summary>
+    private static async Task WaitForExtensionStorageReleaseAsync(
+        string profilePath,
+        string extensionId,
+        int timeoutMs = 20_000,
+        int pollIntervalMs = 100)
+    {
+        var lockPath = Path.Combine(
+            profilePath, "Default", "Local Extension Settings", extensionId, "LOCK");
+
+        if (!File.Exists(lockPath))
+        {
+            // LOCK file absent means the extension storage path doesn't match what we expect.
+            // Fall back to polling the whole profile directory for write quiescence so we
+            // never proceed to CopyDirectory before the profile is fully flushed.
+            Console.WriteLine("[MetaMaskSetupService] Extension storage LOCK not found — falling back to profile quiescence polling.");
+            await WaitForProfileQuiescenceAsync(profilePath, timeoutMs, pollIntervalMs * 5);
+            return;
+        }
+
+        Console.WriteLine("[MetaMaskSetupService] Waiting for Chromium to release extension storage lock...");
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                // LevelDB holds this file exclusively while the database is open.
+                // A successful exclusive open means Chromium has fully exited and the profile is flushed.
+                using var fs = new FileStream(lockPath, FileMode.Open, FileAccess.Read, FileShare.None);
+                Console.WriteLine("[MetaMaskSetupService] Extension storage lock released — profile flush complete.");
+                return;
+            }
+            catch (IOException)
+            {
+                await Task.Delay(pollIntervalMs);
+            }
+        }
+
+        Console.WriteLine($"[MetaMaskSetupService] Warning: timed out after {timeoutMs}ms waiting for extension storage lock release — proceeding anyway.");
+    }
+
+    /// <summary>
+    /// Fallback flush detection: polls the total byte size of the profile directory until it
+    /// remains unchanged across two consecutive reads, indicating Chromium has stopped writing.
+    /// </summary>
+    private static async Task WaitForProfileQuiescenceAsync(
+        string profilePath,
+        int timeoutMs,
+        int pollIntervalMs)
+    {
+        Console.WriteLine("[MetaMaskSetupService] Waiting for profile directory to stabilise...");
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        long prevSize = -1;
+        int stableReads = 0;
+        const int requiredStableReads = 2;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(pollIntervalMs);
+
+            long currentSize = Directory
+                .EnumerateFiles(profilePath, "*", SearchOption.AllDirectories)
+                .Sum(f => { try { return new FileInfo(f).Length; } catch (IOException) { return 0L; } });
+
+            if (currentSize == prevSize)
+            {
+                if (++stableReads >= requiredStableReads)
+                {
+                    Console.WriteLine("[MetaMaskSetupService] Profile directory stable — flush complete.");
+                    return;
+                }
+            }
+            else
+            {
+                stableReads = 0;
+                prevSize = currentSize;
+            }
+        }
+
+        Console.WriteLine($"[MetaMaskSetupService] Warning: timed out after {timeoutMs}ms waiting for profile quiescence — proceeding anyway.");
     }
 
     private static void CopyDirectory(string sourceDir, string destinationDir, bool recursive)

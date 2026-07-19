@@ -29,9 +29,11 @@ public static class TestConfig
 
     /// <summary>
     /// Ethereum private key for additional account import tests.
-    /// Defaults to Hardhat account #1 — a public, zero-value test key.
+    /// Must NOT be derivable from <see cref="SeedPhrase"/>; using a Hardhat account key
+    /// alongside the Hardhat mnemonic causes a "duplicate account" error in MetaMask.
+    /// Defaults to a well-known example key (address 0x2c7536E3…65c23) — never use with real funds.
     /// </summary>
     public static string PrivateKey =>
         Environment.GetEnvironmentVariable("TEST_METAMASK_PRIVATE_KEY")
-        ?? "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+        ?? "0x4c0883a69102937d6231471b5dbb6e538eba2ef2f32e85bf3b5b39a22d2d6b3d";
 }

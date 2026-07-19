@@ -45,10 +45,7 @@ public sealed class WalletImportTests : IAsyncLifetime
         try
         {
             context = await service.SetupAsync();
-
-            Assert.NotNull(context);
-            Assert.NotEmpty(context.Pages);
-            Assert.Contains("chrome-extension://", context.Pages.First().Url);
+            await MetaMaskAssertions.AssertContextReadyAsync(context);
         }
         finally
         {
@@ -86,9 +83,7 @@ public sealed class WalletImportTests : IAsyncLifetime
         try
         {
             context = await service.SetupAsync();
-
-            Assert.NotNull(context);
-            Assert.NotEmpty(context.Pages);
+            await MetaMaskAssertions.AssertContextReadyAsync(context);
         }
         finally
         {

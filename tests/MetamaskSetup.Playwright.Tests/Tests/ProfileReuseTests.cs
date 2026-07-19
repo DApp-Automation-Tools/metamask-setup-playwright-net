@@ -62,17 +62,15 @@ public sealed class ProfileReuseTests : IAsyncLifetime
             .FromUserProfile(profileDirectory);
 
         IBrowserContext? reuseContext = null;
-        using var consoleCapture = new ConsoleCapture();
         try
         {
             reuseContext = await reuseService.SetupAsync();
 
-            Assert.NotNull(reuseContext);
-            Assert.NotEmpty(reuseContext.Pages);
-            Assert.Contains("chrome-extension://", reuseContext.Pages.First().Url);
+            // Wallet must be unlocked — no onboarding, just unlock from profile
+            await MetaMaskAssertions.AssertContextReadyAsync(reuseContext);
 
-            Assert.False(consoleCapture.Contains("Context saved to cache"),
-                "FromUserProfile path should not write a cache entry.");
+            // FromUserProfile must not write a new entry to the cache
+            Assert.Single(cache.CacheEntries());
         }
         finally
         {
@@ -111,19 +109,15 @@ public sealed class ProfileReuseTests : IAsyncLifetime
         // --- Second call: should hit the cache ---
         var service2 = BuildService();
         IBrowserContext? context2 = null;
-        using var consoleCapture = new ConsoleCapture();
         try
         {
             context2 = await service2.SetupAsync();
 
-            Assert.NotNull(context2);
-            Assert.NotEmpty(context2.Pages);
-            Assert.Contains("chrome-extension://", context2.Pages.First().Url);
+            // Wallet must be unlocked — cache hit served the unlocked wallet directly
+            await MetaMaskAssertions.AssertContextReadyAsync(context2);
 
-            // Cache hit path does not write a second entry
+            // Cache hit must not write a second entry
             Assert.Single(cache.CacheEntries());
-            Assert.False(consoleCapture.Contains("Context saved to cache"),
-                "Cache hit path should not write a second cache entry.");
         }
         finally
         {

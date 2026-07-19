@@ -74,7 +74,7 @@ public class HomePageDriver
     
         var isImportButtonHidden = await WaitUtils.WaitForAsync(
             async () => await importButton.IsHiddenAsync(),
-            1_000,
+            10_000,
             false
         );
     
