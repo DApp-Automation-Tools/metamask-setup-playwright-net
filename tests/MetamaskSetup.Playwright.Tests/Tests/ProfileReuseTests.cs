@@ -27,21 +27,11 @@ public sealed class ProfileReuseTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    // -------------------------------------------------------------------------
-    // Scenario: Provide a pre-existing profile directory
-    //
-    // Step 1 — write a cache entry via fresh onboarding.
-    // Step 2 — pass the cache entry directory to FromUserProfile().
-    //          The library detects a "Default" subdirectory → treats it as a profile.
-    //          Only UnlockWalletAsync runs; no onboarding, no network, no account steps.
-    // -------------------------------------------------------------------------
-
     [Fact]
     public async Task FromUserProfile_ExistingCacheEntry_UnlocksWithoutOnboarding()
     {
         using var cache = new IsolatedCacheDirectory();
 
-        // --- Step 1: fresh setup to populate the cache ---
         var freshService = new MetaMaskSetupService(_playwright.Chromium, _extension.ExtensionPath)
             .WithPassword(TestConfig.Password)
             .WithSeedPhrase(TestConfig.SeedPhrase)
@@ -49,14 +39,13 @@ public sealed class ProfileReuseTests : IAsyncLifetime
             .UseContextCacheIfExists(true)
             .WithExtensionSaveDelayMs(500);
 
-        var freshContext = await freshService.SetupAsync();
-        await freshService.CleanupAsync(freshContext);
+        var freshResult = await freshService.SetupAsync();
+        await freshService.CleanupAsync(freshResult);
 
         var entries = cache.CacheEntries();
         Assert.Single(entries);
         var profileDirectory = entries[0];
 
-        // --- Step 2: reuse the cache entry via FromUserProfile ---
         var reuseService = new MetaMaskSetupService(_playwright.Chromium, _extension.ExtensionPath)
             .WithPassword(TestConfig.Password)
             .FromUserProfile(profileDirectory);
@@ -64,12 +53,10 @@ public sealed class ProfileReuseTests : IAsyncLifetime
         IBrowserContext? reuseContext = null;
         try
         {
-            reuseContext = await reuseService.SetupAsync();
+            var reuseResult = await reuseService.SetupAsync();
+            reuseContext = reuseResult.Context;
 
-            // Wallet must be unlocked — no onboarding, just unlock from profile
             await MetaMaskAssertions.AssertContextReadyAsync(reuseContext);
-
-            // FromUserProfile must not write a new entry to the cache
             Assert.Single(cache.CacheEntries());
         }
         finally
@@ -78,13 +65,6 @@ public sealed class ProfileReuseTests : IAsyncLifetime
                 await reuseService.CleanupAsync(reuseContext);
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Scenario: Cache hit — unlock only
-    //
-    // Two consecutive SetupAsync calls with identical parameters on separate service
-    // instances. The second call hits the cache written by the first.
-    // -------------------------------------------------------------------------
 
     [Fact]
     public async Task CacheHit_SecondCallWithSameParameters_SkipsOnboardingAndCacheWrite()
@@ -99,24 +79,20 @@ public sealed class ProfileReuseTests : IAsyncLifetime
                 .UseContextCacheIfExists(true)
                 .WithExtensionSaveDelayMs(500);
 
-        // --- First call: fresh onboarding + cache write ---
         var service1 = BuildService();
-        var context1 = await service1.SetupAsync();
-        await service1.CleanupAsync(context1);
+        var result1 = await service1.SetupAsync();
+        await service1.CleanupAsync(result1);
 
         Assert.Single(cache.CacheEntries());
 
-        // --- Second call: should hit the cache ---
         var service2 = BuildService();
         IBrowserContext? context2 = null;
         try
         {
-            context2 = await service2.SetupAsync();
+            var result2 = await service2.SetupAsync();
+            context2 = result2.Context;
 
-            // Wallet must be unlocked — cache hit served the unlocked wallet directly
             await MetaMaskAssertions.AssertContextReadyAsync(context2);
-
-            // Cache hit must not write a second entry
             Assert.Single(cache.CacheEntries());
         }
         finally

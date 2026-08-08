@@ -113,7 +113,6 @@ public class HomePageDriver
     {
         await page.Locator(HomePageSelectors.AccountOptionsMenuButton).ClickAsync();
         await page.Locator(HomePageSelectors.GlobalMenuLockButton).ClickAsync();
-        await WaitUtils.SleepAsync(500);
     }
 
     public async Task SwitchAccountByAddressAsync(IPage page, string accountAddress)
@@ -169,7 +168,17 @@ public class HomePageDriver
     private async Task<bool> SwitchNetworkFromAdditionalAsync(IPage page, string networkName)
     {
         await page.Locator(SettingsPageSelectors.PopularNetworksTabButton).ClickAsync();
-    
+
+        try
+        {
+            await page.Locator(SettingsPageSelectors.AdditionalNetworkItem).First
+                .WaitForAsync(new() { State = WaitForSelectorState.Attached, Timeout = 3_000 });
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+
         var found = await ClickNetworkByNameAsync(page, SettingsPageSelectors.AdditionalNetworkItem, networkName);
         if (found)
         {
@@ -197,10 +206,17 @@ public class HomePageDriver
     private static async Task HandleConfirmAddingNewNetworkAsync(IPage page)
     {
         var confirmButton = page.Locator(SettingsPageSelectors.ConfirmAddingNewNetwork);
-        await confirmButton.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5000 });
-        if (await confirmButton.IsVisibleAsync())
+        try
         {
-            await confirmButton.ClickAsync();
+            await confirmButton.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5000 });
+            if (await confirmButton.IsVisibleAsync())
+            {
+                await confirmButton.ClickAsync();
+            }
+        }
+        catch (TimeoutException)
+        {
+            // Confirmation dialog is optional when the network was already approved.
         }
     }
 

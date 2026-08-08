@@ -56,5 +56,9 @@ nunit-*.xml
 # IDE folders
 .idea/
 .vs/
+.vscode/
 *.user
 *.suo
+
+# Internal analysis / planning docs (not part of the package)
+/docs/

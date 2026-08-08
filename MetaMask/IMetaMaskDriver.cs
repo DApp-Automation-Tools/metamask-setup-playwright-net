@@ -13,5 +13,5 @@ public interface IMetaMaskDriver
     Task SwitchAccountByNameAsync(string accountName);
     Task SwitchNetworkAsync(string networkName);
     Task UnlockWalletAsync();
-    Task GetCurrentNetworkNameAsync();
+    Task<string> GetCurrentNetworkNameAsync();
 }

@@ -3,8 +3,7 @@ namespace MetamaskSetup.Playwright.Tests.Tests;
 /// <summary>
 /// Covers:
 ///   Scenario: Minimal fresh wallet creation
-///   Scenario: Fresh wallet creation with caching enabled (default)
-///   Scenario: Cache write sequence after fresh import
+///   Scenario: Fresh wallet creation with caching (requires WithCacheDiscriminator)
 /// </summary>
 [Collection(MetaMaskTestCollection.Name)]
 public sealed class FreshWalletCreationTests : IAsyncLifetime
@@ -28,10 +27,6 @@ public sealed class FreshWalletCreationTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    // -------------------------------------------------------------------------
-    // Scenario: Minimal fresh wallet creation (caching explicitly disabled)
-    // -------------------------------------------------------------------------
-
     [Fact]
     public async Task CreateWallet_CachingDisabled_ReturnsUsableContext()
     {
@@ -45,7 +40,8 @@ public sealed class FreshWalletCreationTests : IAsyncLifetime
         IBrowserContext? context = null;
         try
         {
-            context = await service.SetupAsync();
+            var result = await service.SetupAsync();
+            context = result.Context;
 
             await MetaMaskAssertions.AssertContextReadyAsync(context);
             Assert.Empty(cache.CacheEntries());
@@ -57,17 +53,8 @@ public sealed class FreshWalletCreationTests : IAsyncLifetime
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Scenario: Fresh wallet creation with caching enabled (default)
-    // Scenario: Cache write sequence after fresh import
-    //
-    // After onboarding, the service runs Lock → Unlock → close → copy profile to
-    // cache → relaunch → Unlock. We verify the returned context is usable AND
-    // exactly one non-empty cache entry was written to disk.
-    // -------------------------------------------------------------------------
-
     [Fact]
-    public async Task CreateWallet_CachingEnabled_WritesCacheEntryAndReturnsUsableContext()
+    public async Task CreateWallet_WithoutDiscriminator_SkipsCacheWrite()
     {
         using var cache = new IsolatedCacheDirectory();
 
@@ -80,7 +67,36 @@ public sealed class FreshWalletCreationTests : IAsyncLifetime
         IBrowserContext? context = null;
         try
         {
-            context = await service.SetupAsync();
+            var result = await service.SetupAsync();
+            context = result.Context;
+
+            await MetaMaskAssertions.AssertContextReadyAsync(context);
+            Assert.Empty(cache.CacheEntries());
+        }
+        finally
+        {
+            if (context != null)
+                await service.CleanupAsync(context);
+        }
+    }
+
+    [Fact]
+    public async Task CreateWallet_WithDiscriminator_WritesCacheEntryAndReturnsUsableContext()
+    {
+        using var cache = new IsolatedCacheDirectory();
+
+        var service = new MetaMaskSetupService(_playwright.Chromium, _extension.ExtensionPath)
+            .WithPassword(TestConfig.Password)
+            .WithCacheDiscriminator("fresh-wallet-e2e-1")
+            .WithContextCachePath(cache.Path)
+            .UseContextCacheIfExists(true)
+            .WithExtensionSaveDelayMs(500);
+
+        IBrowserContext? context = null;
+        try
+        {
+            var result = await service.SetupAsync();
+            context = result.Context;
 
             await MetaMaskAssertions.AssertContextReadyAsync(context);
 

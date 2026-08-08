@@ -26,11 +26,8 @@ public sealed class WalletImportTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    // -------------------------------------------------------------------------
-    // Scenario: Import with seed phrase
-    // -------------------------------------------------------------------------
-
     [Fact]
+    [Trait("Category", "Smoke")]
     public async Task ImportWallet_ValidSeedPhrase_ReturnsUsableContext()
     {
         using var cache = new IsolatedCacheDirectory();
@@ -44,7 +41,9 @@ public sealed class WalletImportTests : IAsyncLifetime
         IBrowserContext? context = null;
         try
         {
-            context = await service.SetupAsync();
+            var result = await service.SetupAsync();
+            context = result.Context;
+            Assert.False(string.IsNullOrWhiteSpace(result.ExtensionId));
             await MetaMaskAssertions.AssertContextReadyAsync(context);
         }
         finally
@@ -53,10 +52,6 @@ public sealed class WalletImportTests : IAsyncLifetime
                 await service.CleanupAsync(context);
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Scenario: Import with seed phrase + custom network
-    // -------------------------------------------------------------------------
 
     [Fact]
     public async Task ImportWallet_WithCustomNetwork_NetworkAddedAfterOnboarding()
@@ -82,7 +77,8 @@ public sealed class WalletImportTests : IAsyncLifetime
         IBrowserContext? context = null;
         try
         {
-            context = await service.SetupAsync();
+            var result = await service.SetupAsync();
+            context = result.Context;
             await MetaMaskAssertions.AssertContextReadyAsync(context);
         }
         finally

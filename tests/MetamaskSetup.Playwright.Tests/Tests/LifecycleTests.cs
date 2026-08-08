@@ -28,13 +28,6 @@ public sealed class LifecycleTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    // -------------------------------------------------------------------------
-    // Scenario: Normal teardown
-    //
-    // CleanupAsync closes the browser context without throwing.
-    // After cleanup the temp profile directory is removed.
-    // -------------------------------------------------------------------------
-
     [Fact]
     public async Task CleanupAsync_NormalTeardown_ClosesContextAndDeletesTempProfile()
     {
@@ -46,19 +39,13 @@ public sealed class LifecycleTests : IAsyncLifetime
             .UseContextCacheIfExists(false);
 
         var snapshot = new TempProfileSnapshot();
-        var context = await service.SetupAsync();
+        var result = await service.SetupAsync();
 
-        var exception = await Record.ExceptionAsync(() => service.CleanupAsync(context));
+        var exception = await Record.ExceptionAsync(() => service.CleanupAsync(result));
 
         Assert.Null(exception);
         snapshot.AssertAllNewDirectoriesDeleted();
     }
-
-    // -------------------------------------------------------------------------
-    // Scenario: Teardown after a setup failure
-    //
-    // When SetupAsync never completes successfully, CleanupAsync with null is safe.
-    // -------------------------------------------------------------------------
 
     [Fact]
     public async Task CleanupAsync_WithNullContext_DoesNotThrow()
@@ -66,15 +53,9 @@ public sealed class LifecycleTests : IAsyncLifetime
         var service = new MetaMaskSetupService(_playwright.Chromium, _extension.ExtensionPath)
             .WithPassword(TestConfig.Password);
 
-        var exception = await Record.ExceptionAsync(() => service.CleanupAsync(null!));
+        var exception = await Record.ExceptionAsync(() => service.CleanupAsync((IBrowserContext)null!));
         Assert.Null(exception);
     }
-
-    // -------------------------------------------------------------------------
-    // Scenario: Calling CleanupAsync multiple times
-    //
-    // Idempotent — a second call on an already-closed context must not throw.
-    // -------------------------------------------------------------------------
 
     [Fact]
     public async Task CleanupAsync_CalledTwice_IsIdempotent()
@@ -86,11 +67,11 @@ public sealed class LifecycleTests : IAsyncLifetime
             .WithContextCachePath(cache.Path)
             .UseContextCacheIfExists(false);
 
-        var context = await service.SetupAsync();
+        var result = await service.SetupAsync();
 
-        await service.CleanupAsync(context);
+        await service.CleanupAsync(result);
 
-        var exception = await Record.ExceptionAsync(() => service.CleanupAsync(context));
+        var exception = await Record.ExceptionAsync(() => service.CleanupAsync(result.Context));
         Assert.Null(exception);
     }
 }

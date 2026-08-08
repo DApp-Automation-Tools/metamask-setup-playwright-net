@@ -10,7 +10,15 @@ namespace MetamaskSetup.Playwright.Utils
         public static async Task WaitUntilStableAsync(IPage page)
         {
             await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded, new() { Timeout = DEFAULT_TIMEOUT });
-            await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = DEFAULT_TIMEOUT });
+            try
+            {
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = DEFAULT_TIMEOUT });
+            }
+            catch (TimeoutException)
+            {
+                // Extensions often keep RPC/WebSocket traffic alive; do not fail setup on NetworkIdle.
+                Console.WriteLine("[WaitUtils] NetworkIdle timed out — continuing.");
+            }
         }
 
         public static async Task WaitForSelectorAsync(string selector, IPage page, int timeout)
@@ -25,7 +33,7 @@ namespace MetamaskSetup.Playwright.Utils
             {
                 Console.WriteLine($"Loading indicator `{selector}` not found - continuing.");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 Console.WriteLine($"Error while waiting for loading indicator `{selector}` to disappear");
                 throw;

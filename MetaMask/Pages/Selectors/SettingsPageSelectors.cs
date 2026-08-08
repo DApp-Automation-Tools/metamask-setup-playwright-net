@@ -4,7 +4,10 @@ public static class SettingsPageSelectors
 {
     public static string PopularNetworksTabButton =>
         ".network-manager__tab-list .tab:nth-of-type(1) button";
-    
+
+    public static string AdditionalNetworksSection =>
+        "[data-testid='additional-network-item'], .network-manager__tab-content";
+
     public static string NetworksItem(string networkName) => SelectorCreator.DataTestIdSelector(networkName);
 
     public static string AdditionalNetworkItem => SelectorCreator.DataTestIdSelector("additional-network-item");
