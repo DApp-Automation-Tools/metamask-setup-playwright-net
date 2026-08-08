@@ -5,8 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     
-    <!-- NuGet Package Properties -->
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IsPackable>true</IsPackable>
     <Authors>Oleksandra Chuprina</Authors>
     <Company>DApp-Automation-Tools</Company>
     <Description>Playwright-based automation for a MetaMask setup: persistent Chromium with the extension, create/import wallet, unlock, custom networks, switch network, import accounts by private key, optional on-disk profile cache, and cleanup.</Description>
