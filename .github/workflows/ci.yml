@@ -2,8 +2,9 @@ name: Project Build
 
 on:
   push:
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'
@@ -23,9 +24,9 @@ jobs:
           fi
           echo "Branch name is valid: ${{ github.head_ref }}"
 
-      - name: Skip on push
+      - name: Skip on push to main
         if: github.event_name != 'pull_request'
-        run: echo "Branch name check skipped for push events."
+        run: echo "Branch name check skipped for push to main."
 
   build:
     strategy:
@@ -50,6 +51,18 @@ jobs:
           --property WarningLevel=0
           -m:1
 
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.framework }}
+          path: |
+            bin/
+            obj/
+            tests/MetamaskSetup.Playwright.Tests/bin/
+            tests/MetamaskSetup.Playwright.Tests/obj/
+          retention-days: 1
+          include-hidden-files: true
+
   test:
     needs: [check-branch-name, build]
     strategy:
@@ -67,19 +80,16 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Download build output
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ matrix.framework }}
+
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-1.49.0
-
-      # Rebuild here (fresh runner). Skipped entirely if check-branch-name or build failed.
-      - name: Build
-        run: >
-          dotnet build tests/MetamaskSetup.Playwright.Tests/MetamaskSetup.Playwright.Tests.csproj
-          --framework ${{ matrix.framework }}
-          --property WarningLevel=0
-          -m:1
 
       - name: Install Playwright Chromium
         run: pwsh tests/MetamaskSetup.Playwright.Tests/bin/Debug/net8.0/playwright.ps1 install chromium
