@@ -6,16 +6,56 @@ on:
     branches: [ main ]
 
 env:
-  SOLUTION_NAME: 'MetamaskSetup.Playwright.sln'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
 
 jobs:
-  build-and-test:
+  check-branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name
+        if: github.event_name == 'pull_request'
+        run: |
+          if [[ ! "${{ github.head_ref }}" =~ ^(major|feature|fix)/ ]]; then
+            echo "Branch name must start with 'major/', 'feature/', or 'fix/'."
+            echo "Current branch: ${{ github.head_ref }}"
+            echo "Examples: feature/add-login, fix/button-click, major/v2-release"
+            exit 1
+          fi
+          echo "Branch name is valid: ${{ github.head_ref }}"
+
+      - name: Skip on push
+        if: github.event_name != 'pull_request'
+        run: echo "Branch name check skipped for push events."
+
+  build:
     strategy:
       matrix:
         framework: ["net8.0"]
-
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build
+        run: >
+          dotnet build tests/MetamaskSetup.Playwright.Tests/MetamaskSetup.Playwright.Tests.csproj
+          --framework ${{ matrix.framework }}
+          --property WarningLevel=0
+          -m:1
+
+  test:
+    needs: [check-branch-name, build]
+    strategy:
+      matrix:
+        framework: ["net8.0"]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,8 +73,13 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-1.49.0
 
-      - name: Build Solution
-        run: dotnet build ${{ env.SOLUTION_NAME }} --framework ${{ matrix.framework }} --property WarningLevel=0
+      # Rebuild here (fresh runner). Skipped entirely if check-branch-name or build failed.
+      - name: Build
+        run: >
+          dotnet build tests/MetamaskSetup.Playwright.Tests/MetamaskSetup.Playwright.Tests.csproj
+          --framework ${{ matrix.framework }}
+          --property WarningLevel=0
+          -m:1
 
       - name: Install Playwright Chromium
         run: pwsh tests/MetamaskSetup.Playwright.Tests/bin/Debug/net8.0/playwright.ps1 install chromium
