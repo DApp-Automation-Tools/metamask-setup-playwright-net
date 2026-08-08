@@ -2,7 +2,19 @@
 
 Library for **end-to-end and integration tests** that need a real MetaMask wallet inside **Chromium**, driven by [Playwright for .NET](https://playwright.dev/dotnet/). It launches a **persistent browser profile** with the MetaMask extension loaded, then walks through onboarding and wallet management the same way a user would—so your DApp or web3 UI can be exercised against an actual extension, not mocks.
 
-The public surface is centered on **`MetaMaskSetupService`** (fluent configuration) and Playwright’s **`IBrowserContext`** / **`IPage`** for your application under test.
+The public surface is centered on **`MetaMaskSetupService`** (fluent configuration). `SetupAsync` returns a **`MetaMaskSetupResult`** with Playwright’s **`IBrowserContext`** and the MetaMask **`ExtensionId`** for your application under test.
+
+## Supported / not supported
+
+| Supported (bootstrap) | Not supported (you implement) |
+|------------------------|-------------------------------|
+| Launch Chromium with MetaMask extension | DApp connect / `eth_requestAccounts` popups |
+| Create wallet, import SRP, unlock/lock | Transaction confirm / reject UI |
+| Add custom network, switch network | `personal_sign` / typed-data signing |
+| Import accounts by private key, switch account | Token spend / permit / switch-chain prompts |
+| On-disk profile cache for faster re-runs | Headless MetaMask |
+
+This library is a **wallet bootstrap** helper, not a full Synpress-style Dapp confirmation framework. `MetaMaskSetupResult.ExtensionId` is exposed so you can automate notification pages yourself.
 
 ## What you can automate
 
@@ -13,7 +25,7 @@ The public surface is centered on **`MetaMaskSetupService`** (fluent configurati
 | **Networks** | Add a custom network (RPC, chain ID, symbol, optional block explorer) and switch networks (popular, additional, or custom lists). |
 | **Accounts** | Import additional accounts from private keys; switch account by name or address (via the extension UI). |
 | **Performance** | Optional **on-disk profile cache**: after a full setup, copy the user profile to a cache so the next run can reuse it and only unlock (faster CI runs when the scenario allows). |
-| **Lifecycle** | `SetupAsync` returns an `IBrowserContext` for your tests; `CleanupAsync` closes the context and removes temporary profiles. |
+| **Lifecycle** | `SetupAsync` returns `MetaMaskSetupResult`; `CleanupAsync` closes the context and removes temporary profiles. |
 
 ## Supported MetaMask version
 
@@ -23,7 +35,7 @@ This package supports **one** MetaMask extension build per release. All UI flows
 |----------|----------|--------|
 | `METAMASK_VERSION` | `MetamaskSetup.Playwright.Meta.Constants` | **13.2.3** |
 
-You must load an **unpacked** extension directory (folder containing `manifest.json`) that matches this version. When MetaMask’s UI changes, a new **library release** will update selectors and the constant—consumers should not mix arbitrary extension versions with the package.
+You must load an **unpacked** extension directory (folder containing `manifest.json`) that matches this version. `SetupAsync` reads `manifest.json` and **fails fast** if the version does not match. When MetaMask’s UI changes, a new **library release** will update selectors and the constant—consumers should not mix arbitrary extension versions with the package.
 
 ## Getting the MetaMask extension
 
@@ -76,7 +88,7 @@ flowchart TD
   K --> L
   L --> M{Save new profile to cache?}
   M -->|yes| N[Lock, Unlock, close, copy temp to cache, relaunch temp, Unlock]
-  M -->|no| O[Return IBrowserContext]
+  M -->|no| O[Return MetaMaskSetupResult]
   N --> O
   I --> O
 ```
@@ -88,13 +100,22 @@ flowchart TD
 ### Three ways to get a ready wallet
 
 1. **Fresh onboarding (no prior profile)**  
-   Do **not** call `FromUserProfile`. Either omit `WithSeedPhrase` → **create new wallet**, or set `WithSeedPhrase` → **import wallet**.
+   Do **not** call `FromUserProfile`. Either omit `WithSeedPhrase` → **create new wallet**, or set `WithSeedPhrase` → **import wallet** (preferred when you need a deterministic funded account).
 
 2. **Explicit existing profile**  
    `FromUserProfile(path)` copies that profile into a temp user-data directory, then launches. Only **`UnlockWalletAsync`** runs (no import/create, and **no** add network / switch network / private-key import from `SetupAsync`).
 
 3. **On-disk cache (faster repeat runs)**  
    Default cache root: `./cache/metamask-profiles` unless you change it with `WithContextCachePath`. If the path passed to `WithContextCachePath` looks like a **Chromium profile** (it contains a `Default` subdirectory), it is treated as a **direct profile directory** for resolution, not only a cache folder. When cache reuse is enabled and a matching cache entry exists, that profile is reused → **unlock only** (same skipped steps as (2)).
+
+### Create-new wallet and caching
+
+Create-new generates a **random** wallet each run. Caching that path without a discriminator would reuse the wrong address. Rules:
+
+- Call **`WithCacheDiscriminator("my-suite-id")`** when you want create-new profiles cached.
+- If create-new runs **without** a discriminator, cache read/write is **disabled** (with a console warning), even when `UseContextCacheIfExists(true)`.
+
+Import-by-SRP does not need a discriminator; the seed is part of the cache key.
 
 ### Steps that run only on a **new** context
 
@@ -105,16 +126,16 @@ When the service does **not** reuse an existing profile/cache (`usedExistingCont
 3. **`ImportWalletFromPrivateKeyAsync`** for each key from `WithAdditionalAccounts`  
 4. A delay from **`WithExtensionSaveDelayMs`** (default **2000 ms**) so the extension can persist state  
 
-When reusing a profile or cache, **none** of the above run inside `SetupAsync`—the saved profile already defines networks and accounts.
+When reusing a profile or cache, **none** of the above run inside `SetupAsync`—the saved profile already defines networks and accounts. Changing fluent network/account options without invalidating the cache key will **not** update a cached profile; delete the cache entry or change parameters that affect the key.
 
 ### Cache key and cache write
 
-- **Cache key**: first **16 hex characters** of **SHA256** over a string built from seed phrase (or the literal `new`), password, `Constants.METAMASK_VERSION`, optional network fields, and concatenated private keys (`ComputeCacheKey` in `MetaMaskSetupService`).  
-- **Populate cache**: After a full fresh setup, when caching is enabled and the context path is not “profile-only” in the sense used by the service, it may **lock → unlock → close context → copy the temp profile to the cache path → relaunch from the temp profile → unlock** so the on-disk cache is written and the returned context remains usable.
+- **Cache key**: first **16 hex characters** of **SHA256** over seed phrase (or the literal `new`), password, `Constants.METAMASK_VERSION`, optional network-to-add fields, **network-to-select**, concatenated private keys, and optional **cache discriminator**.
+- **Populate cache**: After a full fresh setup, when caching is enabled and eligible, the service may **lock → unlock → close context → copy the temp profile to the cache path → relaunch from the temp profile → unlock** so the on-disk cache is written and the returned context remains usable.
 
 ### Cleanup
 
-- **`CleanupAsync(IBrowserContext)`** closes the context and deletes the **temporary** profile directory under `%TEMP%\playwright_metamask_<guid>` when applicable.  
+- **`CleanupAsync(IBrowserContext)`** / **`CleanupAsync(MetaMaskSetupResult)`** closes the context and deletes the **temporary** profile directory under `%TEMP%\playwright_metamask_<guid>` when applicable.  
 - If `SetupAsync` throws, the service attempts to clean up the temp profile before rethrowing.
 
 ## UI flows (automation steps)
@@ -153,7 +174,7 @@ Account menu → add account or wallet → import with private key → fill key 
 
 ### Current network name
 
-`HomePageDriver.GetCurrentNetworkNameAsync` returns the trimmed network label. `MetaMaskDriver.GetCurrentNetworkNameAsync` currently awaits that call but **does not return** the string to callers; use `HomePageDriver` or wrap it if you need the value.
+`HomePageDriver.GetCurrentNetworkNameAsync` and `MetaMaskDriver.GetCurrentNetworkNameAsync` return the trimmed network label.
 
 ## `NetworkConfig`
 
@@ -178,9 +199,10 @@ Account menu → add account or wallet → import with private key → fill key 
 | `WithAdditionalAccounts(params string[] privateKeys)` | After fresh onboarding only. |
 | `WithContextCachePath(string path)` | Cache root or profile-shaped path (see setup flow). |
 | `UseContextCacheIfExists(bool useCache = true)` | Toggle cache reuse / write behavior (default `true`). |
-| `WithExtensionSaveDelayMs(int ms)` | Delay before persistence-related steps (default `2000`). |
-| `SetupAsync()` | Returns `IBrowserContext` with MetaMask ready (or throws). |
-| `CleanupAsync(IBrowserContext)` | Close context and remove temp profile. |
+| `WithCacheDiscriminator(string)` | Required for caching create-new wallets; included in the cache key. |
+| `WithExtensionSaveDelayMs(int ms)` | Quiet-window floor for extension write quiescence (default **2000**). Prefer leaving the default unless CI is slow. |
+| `SetupAsync()` | Returns `MetaMaskSetupResult` (`Context` + `ExtensionId`) or throws. |
+| `CleanupAsync(IBrowserContext)` / `CleanupAsync(MetaMaskSetupResult)` | Close context and remove temp profile. |
 
 ## Quick usage
 
@@ -194,14 +216,16 @@ var browserType = playwright.Chromium;
 var setup = new MetaMaskSetupService(browserType, @"C:\path\to\unpacked-metamask-13.2.3")
     .WithPassword("your-secure-password");
 
-var context = await setup.SetupAsync();
+var result = await setup.SetupAsync();
 try
 {
+    var context = result.Context;
     // Use context.Pages / new pages for your app under test
+    // result.ExtensionId is available if you automate MetaMask notification popups yourself
 }
 finally
 {
-    await setup.CleanupAsync(context);
+    await setup.CleanupAsync(result);
 }
 ```
 
@@ -231,14 +255,14 @@ var setup = new MetaMaskSetupService(chromium, extensionPath)
     .WithNetworkToSelect("Localhost 8545")
     .WithAdditionalAccounts("0x...private_key_hex...");
 
-var context = await setup.SetupAsync();
+var result = await setup.SetupAsync();
 try
 {
-    // Exercise your DApp; extension id is in the MetaMask page URL host.
+    // Exercise your DApp; extension id is result.ExtensionId
 }
 finally
 {
-    await setup.CleanupAsync(context);
+    await setup.CleanupAsync(result);
 }
 ```
 
@@ -246,13 +270,14 @@ finally
 
 - **Secrets**: Seed phrases and private keys live in configuration and in the **cache key input** (hashed on disk, but still sensitive in memory and in exception messages). Use throwaway test wallets; do not log credentials.  
 - **Cache directories** under `./cache/metamask-profiles` (or your custom path) can hold wallet state—protect them like secrets.  
-- **CI**: The repository workflow builds the solution only; it does not run browser tests. Running MetaMask in CI usually needs a display (for example Xvfb on Linux) and a matching unpacked extension artifact.
+- **CI**: The workflow builds the solution and runs the full test suite under Xvfb (Chromium + MetaMask). Set `GITHUB_TOKEN` (provided automatically on GitHub Actions) so MetaMaskDownloadManager can fetch the pinned extension without rate limits. Optionally set `METAMASK_EXTENSION_PATH` to reuse a pre-cached unpacked build.
 
 ## Limitations
 
-- **Single MetaMask UI version** per package release (`Constants.METAMASK_VERSION`).  
+- **Single MetaMask UI version** per package release (`Constants.METAMASK_VERSION`); mismatched `manifest.json` fails fast.  
 - **Not headless** by design.  
-- **Reused or cached profiles**: `SetupAsync` does **not** re-apply `WithNetworkToAdd`, `WithNetworkToSelect`, or `WithAdditionalAccounts`; those apply only when onboarding into a **new** temp profile.
+- **Reused or cached profiles**: `SetupAsync` does **not** re-apply `WithNetworkToAdd`, `WithNetworkToSelect`, or `WithAdditionalAccounts`; those apply only when onboarding into a **new** temp profile.  
+- **Create-new without `WithCacheDiscriminator`**: caching is skipped to prevent wrong-wallet reuse.
 
 ## License
 

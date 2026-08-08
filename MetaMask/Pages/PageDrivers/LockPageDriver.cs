@@ -14,14 +14,16 @@ public class LockPageDriver
         }
         catch (TimeoutException)
         {
+            await EnsureHomeUiReachableAsync(page);
             return;
         }
 
         await page.Locator(LockPageSelectors.PasswordInput).FillAsync(password);
         await page.Locator(LockPageSelectors.SubmitButton).ClickAsync();
         await MetaMaskUtils.WaitForSpinnerToVanishAsync(page);
+        await EnsureHomeUiReachableAsync(page, timeoutMs: 15_000);
     }
-    
+
     public async Task<bool> IsLocked(IPage page)
     {
         try
@@ -40,5 +42,19 @@ public class LockPageDriver
     {
         await page.Locator(LockPageSelectors.PasswordInput)
             .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = timeoutMs });
+    }
+    private static async Task EnsureHomeUiReachableAsync(IPage page, int timeoutMs = 5_000)
+    {
+        var addressButton = page.Locator(HomePageSelectors.CopyAccountAddressButton);
+        try
+        {
+            await addressButton.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = timeoutMs });
+        }
+        catch (TimeoutException)
+        {
+            throw new TimeoutException(
+                "MetaMask did not show the lock screen or an unlocked home UI within the timeout. " +
+                "The wallet may have failed to load, or the wrong page was selected.");
+        }
     }
 }

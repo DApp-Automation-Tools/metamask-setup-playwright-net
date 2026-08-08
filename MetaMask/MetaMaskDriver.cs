@@ -7,9 +7,20 @@ namespace MetamaskSetup.Playwright.MetaMask
     public class MetaMaskDriver(IBrowserContext context, IPage page, string password, string? extensionId)
         : IMetaMaskDriver
     {
+        // Retained for consumers who construct MetaMaskDriver with context/extension id
+        // when automating notification popups outside this bootstrap library.
+        private readonly IBrowserContext _context = context;
+        private readonly string? _extensionId = extensionId;
+
         private OnboardingPageDriver OnboardingPage { get; } = new();
         private HomePageDriver HomePage { get; } = new();
         private LockPageDriver LockPage { get; } = new();
+
+        /// <summary>Extension id from the MetaMask page URL host, when known.</summary>
+        public string? ExtensionId => _extensionId;
+
+        /// <summary>Browser context that owns the MetaMask page.</summary>
+        public IBrowserContext Context => _context;
 
         public async Task ImportWalletAsync(string seedPhrase)
         {
@@ -46,9 +57,9 @@ namespace MetamaskSetup.Playwright.MetaMask
             await OnboardingPage.CreateNewWalletAsync(page, password);
         }
         
-        public async Task GetCurrentNetworkNameAsync()
+        public async Task<string> GetCurrentNetworkNameAsync()
         {
-            await HomePage.GetCurrentNetworkNameAsync(page);
+            return await HomePage.GetCurrentNetworkNameAsync(page);
         }
         
         public async Task LockWalletAsync()

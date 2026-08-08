@@ -5,19 +5,29 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     
-    <!-- NuGet Package Properties -->
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IsPackable>true</IsPackable>
     <Authors>Oleksandra Chuprina</Authors>
     <Company>DApp-Automation-Tools</Company>
     <Description>Playwright-based automation for a MetaMask setup: persistent Chromium with the extension, create/import wallet, unlock, custom networks, switch network, import accounts by private key, optional on-disk profile cache, and cleanup.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/DApp-Automation-Tools/metamask-setup-playwright-net</PackageProjectUrl>
     <RepositoryUrl>https://github.com/DApp-Automation-Tools/metamask-setup-playwright-net</RepositoryUrl>
-    <RepositoryType>MetaMask</RepositoryType>
+    <RepositoryType>git</RepositoryType>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageTags>playwright;metamask;automation;testing;web3;browser-extension;e2e;dapp</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Prevent Microsoft.TestPlatform.ImportAfter.targets (installed globally by Microsoft.NET.Test.Sdk)
+         from doubling the compile pipeline when the test project is built in the same solution. -->
+    <IsTestProject>false</IsTestProject>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <Compile Remove="MetamaskSetup.Playwright.Tests\**" />
+    <None Remove="tests\**" />
+    <Content Remove="tests\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\"/>
@@ -25,6 +35,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MetamaskSetup.Playwright.Tests" />
   </ItemGroup>
 
 </Project>

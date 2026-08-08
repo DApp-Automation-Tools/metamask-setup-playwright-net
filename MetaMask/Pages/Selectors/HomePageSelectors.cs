@@ -23,6 +23,12 @@ public static class HomePageSelectors
     public static class AccountMenu
     {
         public static string AccountButton => SelectorCreator.DataTestIdSelector("account-menu-icon");
+        /// <summary>
+        /// The dialog element of the account-menu popover. Used to scope child queries so that
+        /// selectors like <see cref="AccountNames"/> don't match hidden off-screen DOM clones
+        /// that share the same CSS class (AllAsync matches the entire page DOM).
+        /// </summary>
+        public const string AccountMenuPopover = ".multichain-account-menu-popover__dialog";
         public static string AddAccountOrWalletButton => SelectorCreator.DataTestIdSelector("multichain-account-menu-popover-action-button");
         public static string ImportWithPrivateKeyButton => SelectorCreator.DataTestIdSelector("multichain-account-menu-popover-add-imported-account");
         public static string PrivateKeyInput => SelectorCreator.IdSelector("private-key-box");
