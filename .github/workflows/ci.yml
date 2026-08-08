@@ -51,24 +51,13 @@ jobs:
           --property WarningLevel=0
           -m:1
 
-      - name: Upload build output
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-${{ matrix.framework }}
-          path: |
-            bin/
-            obj/
-            tests/MetamaskSetup.Playwright.Tests/bin/
-            tests/MetamaskSetup.Playwright.Tests/obj/
-          retention-days: 1
-          include-hidden-files: true
-
   test:
     needs: [check-branch-name, build]
     strategy:
       matrix:
         framework: ["net8.0"]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -80,22 +69,31 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Download build output
-        uses: actions/download-artifact@v4
-        with:
-          name: build-${{ matrix.framework }}
-
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-1.49.0
 
+      - name: Build for test
+        run: >
+          dotnet build tests/MetamaskSetup.Playwright.Tests/MetamaskSetup.Playwright.Tests.csproj
+          --framework ${{ matrix.framework }}
+          --property WarningLevel=0
+          -m:1
+
       - name: Install Playwright Chromium
-        run: pwsh tests/MetamaskSetup.Playwright.Tests/bin/Debug/net8.0/playwright.ps1 install chromium
+        run: pwsh tests/MetamaskSetup.Playwright.Tests/bin/Debug/net8.0/playwright.ps1 install chromium --with-deps
 
       - name: Install Xvfb
         run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+
+      - name: List tests
+        run: >
+          dotnet test tests/MetamaskSetup.Playwright.Tests/MetamaskSetup.Playwright.Tests.csproj
+          --framework ${{ matrix.framework }}
+          --no-build
+          --list-tests
 
       - name: Run all tests
         env:
@@ -104,4 +102,4 @@ jobs:
           xvfb-run -a dotnet test tests/MetamaskSetup.Playwright.Tests/MetamaskSetup.Playwright.Tests.csproj
           --framework ${{ matrix.framework }}
           --no-build
-          --logger "console;verbosity=normal"
+          --logger "console;verbosity=detailed"
